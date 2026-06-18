@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maiuan — Cinematic Reel</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@400;700;800;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
+
+  .reel {
+    width: 100vw; height: 100vh;
+    position: relative; background: #000;
+  }
+
+  canvas#mainCanvas {
+    position: absolute; inset: 0; z-index: 1;
+  }
+
+  .overlay {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s cubic-bezier(.4,0,.2,1);
+  }
+  .overlay.active { opacity: 1; }
+
+  .word-manifesto {
+    font-family: 'Big Shoulders Display', sans-serif; font-weight: 900;
+    font-size: clamp(48px, 10vw, 120px); color: #e8ff00;
+    text-transform: uppercase; line-height: 1;
+    position: absolute;
+    opacity: 0; transform: translateY(30px) scale(0.95);
+    filter: blur(6px);
+    transition: all 0.5s cubic-bezier(.4,0,.2,1);
+  }
+  .word-manifesto.show {
+    opacity: 1; transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  .word-manifesto.hide {
+    opacity: 0; transform: translateY(-20px) scale(1.02);
+    filter: blur(4px);
+    transition: all 0.35s ease;
+  }
+
+  .final-logo {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 12px;
+    opacity: 0; transform: translateY(20px);
+    transition: all 1s cubic-bezier(.4,0,.2,1) 0.3s;
+  }
+  .overlay.active .final-logo {
+    opacity: 1; transform: translateY(0);
+  }
+  .final-mark {
+    opacity: 0; transform: translateY(-6px) scale(0.96);
+    transition: all 0.6s cubic-bezier(.22,.68,0,1.2) 0.5s;
+  }
+  .overlay.active .final-mark {
+    opacity: 1; transform: translateY(0) scale(1);
+  }
+  .final-word-row {
+    display: flex; align-items: center;
+    position: relative; height: 72px; gap: 4px;
+  }
+  .final-L {
+    font-family: 'Big Shoulders Display', 'Arial Narrow', Arial, sans-serif;
+    font-size: clamp(44px, 9vw, 70px); font-weight: 800;
+    color: #e8ff00; line-height: 1; letter-spacing: 0.02em;
+    text-transform: uppercase; display: inline-block;
+    opacity: 0;
+  }
+  .overlay.active .final-L-u {
+    animation: fU 0.4s ease forwards 0.9s, fBackU 0.5s cubic-bezier(.4,0,.2,1) forwards 2.0s;
+  }
+  .overlay.active .final-L-i {
+    animation: fI 0.4s ease forwards 1.06s, fBackI 0.5s cubic-bezier(.4,0,.2,1) forwards 2.0s;
+  }
+  .overlay.active .final-L-m  { animation: fSL 0.44s cubic-bezier(.4,0,.2,1) forwards 3.12s; }
+  .overlay.active .final-L-a1 { animation: fSL 0.44s cubic-bezier(.4,0,.2,1) forwards 3.23s; }
+  .overlay.active .final-L-a2 { animation: fSR 0.44s cubic-bezier(.4,0,.2,1) forwards 3.12s; }
+  .overlay.active .final-L-n  { animation: fSR 0.44s cubic-bezier(.4,0,.2,1) forwards 3.23s; }
+
+  @keyframes fU { from { opacity:0; transform: translateY(10px) translateX(var(--u-to-i, -46px)); } to { opacity:1; transform: translateY(0) translateX(var(--u-to-i, -46px)); } }
+  @keyframes fI { from { opacity:0; transform: translateY(10px) translateX(var(--i-to-u, 46px)); } to { opacity:1; transform: translateY(0) translateX(var(--i-to-u, 46px)); } }
+  @keyframes fBackU { from { transform:translateX(var(--u-to-i, -46px)); } to { transform:none; } }
+  @keyframes fBackI { from { transform:translateX(var(--i-to-u, 46px));  } to { transform:none; } }
+  @keyframes fSL { from { opacity:0; transform:translateX(-44px); } to { opacity:1; transform:none; } }
+  @keyframes fSR { from { opacity:0; transform:translateX(44px);  } to { opacity:1; transform:none; } }
+
+  .final-tagline {
+    font-family: 'Inter', sans-serif; font-weight: 300;
+    font-size: 14px; color: rgba(255,255,255,0.45);
+    letter-spacing: 0.08em; margin-top: 20px;
+    opacity: 0; transition: opacity 0.8s ease 4.0s;
+  }
+  .overlay.active .final-tagline { opacity: 1; }
+  .final-sub {
+    font-family: 'Inter', sans-serif; font-weight: 400;
+    font-size: 12px; color: rgba(232,255,0,0.5);
+    letter-spacing: 0.25em; text-transform: uppercase;
+    margin-top: 8px; opacity: 0;
+    transition: opacity 0.6s ease 4.5s;
+  }
+  .overlay.active .final-sub { opacity: 1; }
+
+  .progress-bar {
+    position: fixed; bottom: 0; left: 0; height: 1px;
+    background: rgba(232,255,0,0.35); width: 0%;
+    transition: width 0.2s linear; z-index: 100;
+  }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%);
+  }
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- SVG oculto con el favicon exacto -->
+<svg id="hiddenSvg" style="position:absolute;width:0;height:0;" viewBox="0 0 345 345" xmlns="http://www.w3.org/2000/svg">
+  <g id="faviconGroup" transform="translate(0,207) scale(0.1,-0.1)">
+    <path id="favPath1" d="M1520 1400 c113 -142 208 -259 211 -260 3 0 99 117 213 260 114 143 212 260 216 260 5 0 67 -80 137 -177 126 -173 702 -991 738 -1046 l17 -27 -235 0 -236 0 -103 148 c-57 81 -164 237 -238 345 -74 108 -138 197 -141 197 -3 0 -20 -21 -38 -47 -59 -84 -325 -423 -332 -423 -6 0 -281 352 -355 454 l-20 28 -235 -349 -235 -348 -238 -3 c-131 -1 -236 1 -234 6 1 4 70 102 152 217 82 116 203 287 269 380 66 94 183 258 260 365 77 107 154 214 171 238 16 23 35 42 40 42 6 0 103 -117 216 -260z"/>
+    <path id="favPath2" d="M1553 577 l138 -162 -141 -3 c-77 -1 -203 -1 -279 0 l-139 3 129 163 c72 89 135 162 142 161 7 0 74 -73 150 -162z"/>
+    <path id="favPath3" d="M2203 577 c70 -87 127 -160 127 -163 0 -2 -124 -4 -276 -4 -165 0 -274 4 -272 9 8 24 273 321 283 319 6 -2 69 -74 138 -161z"/>
+  </g>
+</svg>
+
+<div class="reel">
+  <canvas id="mainCanvas"></canvas>
+
+  <div class="overlay" id="overlayManifesto">
+    <div class="word-manifesto" id="mw1">UTILIDAD</div>
+    <div class="word-manifesto" id="mw2">PRECISIÓN</div>
+    <div class="word-manifesto" id="mw3">EVOLUCIÓN</div>
+    <div class="word-manifesto" id="mw4">IMPACTO</div>
+    <div class="word-manifesto" id="mw5">SISTEMAS</div>
+  </div>
+
+  <div class="overlay" id="overlayFinal">
+    <div class="final-logo">
+      <div class="final-mark">
+        <svg width="148" height="89" viewBox="20 55 325 120" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(0,207) scale(0.1,-0.1)" fill="#e8ff00" stroke="none">
+            <path d="M1520 1400 c113 -142 208 -259 211 -260 3 0 99 117 213 260 114 143 212 260 216 260 5 0 67 -80 137 -177 126 -173 702 -991 738 -1046 l17 -27 -235 0 -236 0 -103 148 c-57 81 -164 237 -238 345 -74 108 -138 197 -141 197 -3 0 -20 -21 -38 -47 -59 -84 -325 -423 -332 -423 -6 0 -281 352 -355 454 l-20 28 -235 -349 -235 -348 -238 -3 c-131 -1 -236 1 -234 6 1 4 70 102 152 217 82 116 203 287 269 380 66 94 183 258 260 365 77 107 154 214 171 238 16 23 35 42 40 42 6 0 103 -117 216 -260z"/>
+            <path d="M1553 577 l138 -162 -141 -3 c-77 -1 -203 -1 -279 0 l-139 3 129 163 c72 89 135 162 142 161 7 0 74 -73 150 -162z"/>
+            <path d="M2203 577 c70 -87 127 -160 127 -163 0 -2 -124 -4 -276 -4 -165 0 -274 4 -272 9 8 24 273 321 283 319 6 -2 69 -74 138 -161z"/>
+          </g>
+        </svg>
+      </div>
+      <div class="final-word-row" id="finalWordRow">
+        <span class="final-L final-L-m">M</span>
+        <span class="final-L final-L-a1">A</span>
+        <span class="final-L final-L-i">I</span>
+        <span class="final-L final-L-u">U</span>
+        <span class="final-L final-L-a2">A</span>
+        <span class="final-L final-L-n">N</span>
+      </div>
+      <div class="final-tagline">Construimos software útil, simple y bien ejecutado.</div>
+      <div class="final-sub">SOFTWARE QUE RESUELVE</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SETUP
+// ═══════════════════════════════════════════════════════════════
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  CX = W / 2; CY = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ═══════════════════════════════════════════════════════════════
+// EXTRACT LOGO POINTS FROM SVG
+// Transformación: translate(0,207) scale(0.1,-0.1)
+// FIX: invertir Y 180 grados para que la M no se vea como W
+// ═══════════════════════════════════════════════════════════════
+let logoPaths = [];
+
+function extractLogoPoints() {
+  const svg = document.getElementById('hiddenSvg');
+  const paths = svg.querySelectorAll('path');
+
+  const sx = 0.1, sy = -0.1;
+  const tx = 0, ty = 207;
+
+  let allX = [], allY = [];
+
+  paths.forEach(path => {
+    const len = path.getTotalLength();
+    const samples = Math.max(80, Math.floor(len / 4));
+    const pathPoints = [];
+
+    for (let i = 0; i <= samples; i++) {
+      const pt = path.getPointAtLength(i * len / samples);
+      const tx_val = pt.x * sx + tx;
+      const ty_val = pt.y * sy + ty;
+      pathPoints.push({ x: tx_val, y: ty_val });
+      allX.push(tx_val);
+      allY.push(ty_val);
+    }
+
+    const firstP = pathPoints[0];
+    const lastP = pathPoints[pathPoints.length - 1];
+    if (firstP.x !== lastP.x || firstP.y !== lastP.y) {
+      pathPoints.push({ x: firstP.x, y: firstP.y });
+    }
+
+    logoPaths.push(pathPoints);
+  });
+
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const scale = Math.max(maxX - minX, maxY - minY) / 2;
+
+  // Normalizar a [-1, 1] y rotar 180° (negar ambos ejes)
+  logoPaths = logoPaths.map(pathPoints => 
+    pathPoints.map(p => ({
+      x: -(p.x - cx) / scale,
+      y: (p.y - cy) / scale,
+      z: 0
+    }))
+  );
+
+  console.log('Logo paths extracted:', logoPaths.length, 
+    'Total points:', logoPaths.reduce((a,p) => a+p.length, 0));
+}
+
+extractLogoPoints();
+
+// ═══════════════════════════════════════════════════════════════
+// TIMELINE
+// ═══════════════════════════════════════════════════════════════
+const PHASES = [
+  { name: 'chaos',      duration: 3000 },
+  { name: 'converge',   duration: 3000 },
+  { name: 'compress',   duration: 3000 },
+  { name: 'build',      duration: 4000 },
+  { name: 'reveal',     duration: 3000 },
+  { name: 'morph',      duration: 3000 },
+  { name: 'manifesto',  duration: 6000 },
+  { name: 'final',      duration: 7000 },
+];
+const TOTAL_DURATION = PHASES.reduce((a,p) => a + p.duration, 0);
+
+let startTime = null;
+let hasFinished = false;
+
+// ═══════════════════════════════════════════════════════════════
+// 3D PROJECTION
+// ═══════════════════════════════════════════════════════════════
+const FOCAL = 600;
+
+function project(x, y, z) {
+  const scale = FOCAL / (FOCAL + z);
+  return { x: CX + x * scale, y: CY + y * scale, scale: scale };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PARTICLE SYSTEM — 120 partículas
+// ═══════════════════════════════════════════════════════════════
+const PARTICLE_COUNT = 120;
+let particles = [];
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 400 + Math.random() * 600;
+    this.x = r * Math.sin(phi) * Math.cos(theta);
+    this.y = r * Math.sin(phi) * Math.sin(theta);
+    this.z = r * Math.cos(phi) + 300;
+    this.vx = (Math.random() - 0.5) * 1.5;
+    this.vy = (Math.random() - 0.5) * 1.5;
+    this.vz = (Math.random() - 0.5) * 1.5;
+    this.size = Math.random() * 1.8 + 0.8;
+    this.brightness = Math.random() * 0.4 + 0.3;
+    this.pulse = Math.random() * Math.PI * 2;
+    this.targetX = 0; this.targetY = 0; this.targetZ = 0;
+    this.alpha = 1;
+  }
+  update(dt, mode, t) {
+    this.pulse += dt * 3;
+
+    if (mode === 0) {
+      this.x += this.vx; this.y += this.vy; this.z += this.vz;
+      const d = Math.sqrt(this.x*this.x + this.y*this.y + this.z*this.z);
+      if (d > 1500 || d < 200) this.reset();
+    }
+    else if (mode === 1) {
+      const attract = 0.025 * t;
+      this.vx += (this.targetX - this.x) * attract;
+      this.vy += (this.targetY - this.y) * attract;
+      this.vz += (this.targetZ - this.z) * attract;
+      this.vx *= 0.93; this.vy *= 0.93; this.vz *= 0.93;
+      this.x += this.vx; this.y += this.vy; this.z += this.vz;
+    }
+    else if (mode === 2) {
+      const collapse = 0.05 * t;
+      this.vx += (0 - this.x) * collapse;
+      this.vy += (0 - this.y) * collapse;
+      this.vz += (0 - this.z) * collapse;
+      this.vx *= 0.90; this.vy *= 0.90; this.vz *= 0.90;
+      this.x += this.vx; this.y += this.vy; this.z += this.vz;
+    }
+    else if (mode === 3 || mode === 4) {
+      const snap = 0.06 * t;
+      this.vx += (this.targetX - this.x) * snap;
+      this.vy += (this.targetY - this.y) * snap;
+      this.vz += (this.targetZ - this.z) * snap;
+      this.vx *= 0.88; this.vy *= 0.88; this.vz *= 0.88;
+      this.x += this.vx; this.y += this.vy; this.z += this.vz;
+    }
+    else if (mode === 5) {
+      this.x += this.vx * 0.2; this.y += this.vy * 0.2; this.z += this.vz * 0.2;
+      const rf = 0.015;
+      this.vx += (this.targetX - this.x) * rf;
+      this.vy += (this.targetY - this.y) * rf;
+      this.vz += (this.targetZ - this.z) * rf;
+      this.vx *= 0.92; this.vy *= 0.92; this.vz *= 0.92;
+    }
+    else if (mode === 6) {
+      this.alpha -= 0.02;
+      if (this.alpha < 0) this.alpha = 0;
+    }
+  }
+  draw(ctx, alphaMult) {
+    if (this.alpha <= 0) return;
+    const p = project(this.x, this.y, this.z);
+    const alpha = this.brightness * (0.4 + 0.6 * Math.sin(this.pulse)) * alphaMult * this.alpha;
+    const s = this.size * p.scale * 1.5;
+    if (s < 0.15) return;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(232, 255, 0, ${alpha})`;
+    ctx.fill();
+  }
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+}
+initParticles();
+
+// ═══════════════════════════════════════════════════════════════
+// CONNECTIONS
+// ═══════════════════════════════════════════════════════════════
+function drawConnections(ctx, threshold, alpha) {
+  for (let i = 0; i < particles.length; i += 2) {
+    for (let j = i + 1; j < particles.length; j += 2) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dz = particles[i].z - particles[j].z;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (dist < threshold) {
+        const p1 = project(particles[i].x, particles[i].y, particles[i].z);
+        const p2 = project(particles[j].x, particles[j].y, particles[j].z);
+        const a = alpha * (1 - dist / threshold) * Math.min(particles[i].alpha, particles[j].alpha);
+        if (a < 0.01) continue;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = `rgba(232, 255, 0, ${a})`;
+        ctx.lineWidth = 0.4 * ((p1.scale + p2.scale) / 2);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRAW LOGO — 3 paths separados, cada uno cerrado correctamente
+// ═══════════════════════════════════════════════════════════════
+function drawLogoExact(ctx, scale, alpha, fillAlpha, lineWidth) {
+  if (logoPaths.length === 0) return;
+
+  ctx.save();
+  ctx.translate(CX, CY);
+
+  const s = scale;
+
+  logoPaths.forEach((path, pidx) => {
+    if (path.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(path[0].x * s, path[0].y * s);
+    for (let i = 1; i < path.length; i++) {
+      ctx.lineTo(path[i].x * s, path[i].y * s);
+    }
+    ctx.closePath();
+
+    if (fillAlpha > 0) {
+      ctx.fillStyle = `rgba(232, 255, 0, ${fillAlpha})`;
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = `rgba(232, 255, 0, ${alpha})`;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+function drawLogoProgressive(ctx, progress, scale) {
+  if (logoPaths.length === 0) return;
+
+  ctx.save();
+  ctx.translate(CX, CY);
+
+  const s = scale;
+  const pathProgress = 1 / logoPaths.length;
+
+  logoPaths.forEach((path, pathIdx) => {
+    const pathStart = pathIdx * pathProgress;
+    const pathEnd = pathStart + pathProgress;
+    const localProgress = Math.max(0, Math.min(1, (progress - pathStart) / (pathEnd - pathStart)));
+
+    if (localProgress <= 0) return;
+
+    const totalSegs = path.length - 1;
+    const segLen = 1 / totalSegs;
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (let i = 0; i < totalSegs; i++) {
+      const segProg = Math.max(0, Math.min(1, (localProgress - i * segLen) / (segLen * 1.5)));
+      if (segProg <= 0) continue;
+
+      const ease = 1 - Math.pow(1 - segProg, 2);
+      const mx = path[i].x * s + (path[i+1].x - path[i].x) * s * ease;
+      const my = path[i].y * s + (path[i+1].y - path[i].y) * s * ease;
+
+      ctx.beginPath();
+      ctx.moveTo(path[i].x * s, path[i].y * s);
+      ctx.lineTo(mx, my);
+      ctx.strokeStyle = `rgba(232, 255, 0, ${0.1 * segProg})`;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(path[i].x * s, path[i].y * s);
+      ctx.lineTo(mx, my);
+      ctx.strokeStyle = `rgba(232, 255, 0, ${0.85 * segProg})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      if (segProg > 0.85) {
+        ctx.beginPath();
+        ctx.arc(mx, my, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(232, 255, 0, ${(segProg - 0.85) * 6})`;
+        ctx.fill();
+      }
+    }
+
+    if (localProgress > 0.95) {
+      ctx.beginPath();
+      ctx.moveTo(path[path.length-1].x * s, path[path.length-1].y * s);
+      ctx.lineTo(path[0].x * s, path[0].y * s);
+      ctx.strokeStyle = `rgba(232, 255, 0, ${0.85 * (localProgress - 0.95) * 20})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  });
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MORPHING LOGO
+// ═══════════════════════════════════════════════════════════════
+function getMorphLogoPoints(basePaths, time) {
+  return basePaths.map(path => 
+    path.map((pt, i) => ({
+      x: pt.x + Math.sin(time * 2 + i * 0.5) * 0.03 * Math.sin(time * Math.PI),
+      y: pt.y + Math.cos(time * 1.5 + i * 0.7) * 0.02 * Math.sin(time * Math.PI),
+      z: Math.sin(time * 3 + i) * 0.05 * Math.sin(time * Math.PI)
+    }))
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MANIFESTO CONTROLLER
+// ═══════════════════════════════════════════════════════════════
+const manifestoWords = ['mw1','mw2','mw3','mw4','mw5'];
+const manifestoTexts = ['UTILIDAD','PRECISIÓN','EVOLUCIÓN','IMPACTO','SISTEMAS'];
+let manifestoIndex = -1;
+
+function showManifestoWord(index) {
+  manifestoWords.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('show', 'hide');
+    el.textContent = manifestoTexts[i];
+    if (i === index) el.classList.add('show');
+  });
+}
+function hideManifestoWord(index) {
+  const el = document.getElementById(manifestoWords[index]);
+  el.classList.remove('show');
+  el.classList.add('hide');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN RENDER LOOP
+// ═══════════════════════════════════════════════════════════════
+function render(timestamp) {
+  if (!startTime) startTime = timestamp;
+  const elapsed = timestamp - startTime;
+
+  let phaseIdx = 0;
+  let phaseElapsed = elapsed;
+  for (let i = 0; i < PHASES.length; i++) {
+    if (phaseElapsed < PHASES[i].duration) { phaseIdx = i; break; }
+    phaseElapsed -= PHASES[i].duration;
+  }
+
+  if (elapsed >= TOTAL_DURATION) {
+    if (!hasFinished) {
+      hasFinished = true;
+      setTimeout(() => {
+        startTime = null;
+        hasFinished = false;
+        initParticles();
+        document.getElementById('overlayManifesto').classList.remove('active');
+        document.getElementById('overlayFinal').classList.remove('active');
+        const finalOverlay = document.getElementById('overlayFinal');
+        finalOverlay.classList.remove('active');
+        void finalOverlay.offsetWidth;
+      }, 500);
+    }
+    requestAnimationFrame(render);
+    return;
+  }
+
+  const phase = PHASES[phaseIdx];
+  const t = phaseElapsed / phase.duration;
+  document.getElementById('progressBar').style.width = (elapsed / TOTAL_DURATION * 100) + '%';
+
+  const logoScale = Math.min(W, H) * 0.35;
+
+  // ── PHASE 0: CHAOS ──
+  if (phaseIdx === 0) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.fillRect(0, 0, W, H);
+    particles.forEach(p => { p.update(0.016, 0, 1); p.draw(ctx, 1); });
+  }
+
+  // ── PHASE 1: CONVERGENCE ──
+  else if (phaseIdx === 1) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.fillRect(0, 0, W, H);
+
+    const netPositions = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle = (i / PARTICLE_COUNT) * Math.PI * 2 + Math.random() * 0.3;
+      const dist = logoScale * (0.6 + Math.random() * 0.8);
+      netPositions.push({ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, z: (Math.random() - 0.5) * 150 });
+    }
+    particles.forEach((p, i) => {
+      p.targetX = netPositions[i].x; p.targetY = netPositions[i].y; p.targetZ = netPositions[i].z;
+      p.update(0.016, 1, t);
+    });
+
+    drawConnections(ctx, 100, 0.25 + t * 0.2);
+    particles.forEach(p => p.draw(ctx, 1));
+  }
+
+  // ── PHASE 2: COMPRESSION ──
+  else if (phaseIdx === 2) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+    ctx.fillRect(0, 0, W, H);
+    particles.forEach(p => { p.targetX = 0; p.targetY = 0; p.targetZ = 0; p.update(0.016, 2, t); });
+    drawConnections(ctx, 70 * (1 - t), 0.35 * (1 - t));
+    particles.forEach(p => p.draw(ctx, 1 - t * 0.2));
+  }
+
+  // ── PHASE 3: BUILD (logo wireframe progresivo) ──
+  else if (phaseIdx === 3) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.fillRect(0, 0, W, H);
+
+    if (logoPaths.length > 0) {
+      const allPoints = logoPaths.flat();
+      particles.forEach((p, i) => {
+        const idx = i % allPoints.length;
+        const spread = 20 * (1 - t);
+        p.targetX = allPoints[idx].x * logoScale + (Math.random() - 0.5) * spread;
+        p.targetY = allPoints[idx].y * logoScale + (Math.random() - 0.5) * spread;
+        p.targetZ = (Math.random() - 0.5) * spread;
+        p.update(0.016, 3, 1);
+      });
+    }
+
+    drawLogoProgressive(ctx, t, logoScale);
+
+    particles.forEach(p => {
+      const p2 = project(p.x, p.y, p.z);
+      ctx.beginPath();
+      ctx.arc(p2.x, p2.y, 1.2 * p2.scale, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(232, 255, 0, ${0.5 * (1 - t * 0.3)})`;
+      ctx.fill();
+    });
+  }
+
+  // ── PHASE 4: REVEAL (logo solidifica) ──
+  else if (phaseIdx === 4) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+    ctx.fillRect(0, 0, W, H);
+
+    if (logoPaths.length > 0) {
+      const allPoints = logoPaths.flat();
+      particles.forEach((p, i) => {
+        const idx = i % allPoints.length;
+        p.targetX = allPoints[idx].x * logoScale;
+        p.targetY = allPoints[idx].y * logoScale;
+        p.targetZ = 0;
+        p.update(0.016, 3, 1);
+      });
+    }
+
+    const solidity = Math.min(1, t * 1.3);
+    drawLogoExact(ctx, logoScale, solidity * 0.9, solidity * 0.12, 1.5 + solidity * 3);
+
+    if (t > 0.3) {
+      const breathe = 1 + Math.sin(t * Math.PI * 3) * 0.006;
+      const breathedPaths = logoPaths.map(path => 
+        path.map(pt => ({ x: pt.x * breathe, y: pt.y * breathe, z: 0 }))
+      );
+      const orig = logoPaths;
+      logoPaths = breathedPaths;
+      drawLogoExact(ctx, logoScale, solidity * 0.25 * 0.9, solidity * 0.25 * 0.08, 1);
+      logoPaths = orig;
+    }
+
+    particles.forEach(p => {
+      const p2 = project(p.x, p.y, p.z);
+      ctx.beginPath();
+      ctx.arc(p2.x, p2.y, 0.8 * p2.scale, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(232, 255, 0, ${0.25 * (1 - t)})`;
+      ctx.fill();
+    });
+  }
+
+  // ── PHASE 5: MORPH ──
+  else if (phaseIdx === 5) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.fillRect(0, 0, W, H);
+
+    if (logoPaths.length > 0) {
+      const morphPaths = getMorphLogoPoints(logoPaths, t * 3);
+      const orig = logoPaths;
+      logoPaths = morphPaths;
+      drawLogoExact(ctx, logoScale, 0.5 + 0.4 * Math.sin(t * Math.PI * 4), 0.06, 1.8);
+      logoPaths = orig;
+
+      morphPaths.forEach((path, pi) => {
+        path.forEach((pt, i) => {
+          const proj = project(pt.x * logoScale, pt.y * logoScale, pt.z * logoScale);
+          const pulse = 0.5 + 0.5 * Math.sin(t * 5 + i * 0.4 + pi);
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, 2.5 * pulse * proj.scale, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(232, 255, 0, ${0.6 * pulse})`;
+          ctx.fill();
+        });
+      });
+    }
+
+    particles.forEach(p => { p.update(0.016, 5, 1); p.draw(ctx, 0.3); });
+  }
+
+  // ── PHASE 6: MANIFESTO ──
+  else if (phaseIdx === 6) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.5 + t * 0.5})`;
+    ctx.fillRect(0, 0, W, H);
+    particles.forEach(p => { p.update(0.016, 6, 1); });
+    particles.forEach(p => p.draw(ctx, 1));
+
+    const overlay = document.getElementById('overlayManifesto');
+    overlay.classList.add('active');
+
+    const wordInterval = phase.duration / 5;
+    const currentWord = Math.floor(phaseElapsed / wordInterval);
+
+    if (currentWord !== manifestoIndex && currentWord < 5) {
+      if (manifestoIndex >= 0) hideManifestoWord(manifestoIndex);
+      manifestoIndex = currentWord;
+      showManifestoWord(manifestoIndex);
+    }
+
+    if (phaseElapsed > phase.duration - 400 && manifestoIndex >= 0) {
+      hideManifestoWord(manifestoIndex);
+    }
+  }
+
+  // ── PHASE 7: FINAL ──
+  else if (phaseIdx === 7) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    document.getElementById('overlayManifesto').classList.remove('active');
+    const overlay = document.getElementById('overlayFinal');
+    overlay.classList.add('active');
+  }
+
+  requestAnimationFrame(render);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════════════════════════
+requestAnimationFrame(render);
+
+// Logo swap offsets
+function setSwapOffsets() {
+  const elU = document.querySelector('.final-L-u');
+  const elI = document.querySelector('.final-L-i');
+  const row = document.getElementById('finalWordRow');
+  if (!elU || !elI || !row) return;
+  const gap = parseFloat(getComputedStyle(row).gap) || 0;
+  const wU = elU.getBoundingClientRect().width;
+  const wI = elI.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--u-to-i', `-${wU + gap}px`);
+  document.documentElement.style.setProperty('--i-to-u', `${wU + gap}px`);
+}
+setSwapOffsets();
+window.addEventListener('resize', setSwapOffsets);
+
+// Space to restart
+document.addEventListener('keydown', (e) => {
+  if (e.key === ' ') {
+    e.preventDefault();
+    startTime = null;
+    hasFinished = false;
+    initParticles();
+    document.getElementById('overlayManifesto').classList.remove('active');
+    document.getElementById('overlayFinal').classList.remove('active');
+    manifestoIndex = -1;
+    const finalOverlay = document.getElementById('overlayFinal');
+    finalOverlay.classList.remove('active');
+    void finalOverlay.offsetWidth;
+  }
+});
+</script>
+
+</body>
+</html>

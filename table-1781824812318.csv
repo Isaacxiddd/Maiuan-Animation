@@ -1,0 +1,16 @@
+﻿Sección,Qué cubre,Ejemplo de cita
+**1. Estructura general**,"Capas visuales (canvas, overlays, decoración)",`Línea ~22`
+**2. Fases de la animación**,Array `PHASES` con duraciones,`Línea ~260`
+**3. Sistema de partículas**,"Cantidad, 6 modos de movimiento, velocidades","`Línea ~290`, `~310-350`"
+**4. El logo — SVG**,"SVG oculto, extracción de puntos, orientación 180°","`Línea ~52`, `~155`, `~195`"
+**5. Renderizado canvas**,"`drawLogoProgressive()`, `drawLogoExact()`, tamaño","`Línea ~430`, `~390`, `~555`"
+**6. Manifiesto**,"Palabras, timing, estilo CSS","`Línea ~475`, `~650`, `~35`"
+**7. Logo final DOM**,"SVG mark, animación U↔I, `setSwapOffsets()`","`Línea ~72`, `~82`, `~700`"
+**8. Tagline**,Textos editables directamente,`Línea ~90`
+**9. Proyección 3D**,"`FOCAL = 600`, función `project()`",`Línea ~270`
+**10. Colores**,Paleta completa con hex/RGB,"`#e8ff00`, `#000`"
+**11. Grabar**,Instrucciones OBS/QuickTime/Game Bar,—
+**12. Controles**,`Space` para reiniciar,`Línea ~720`
+**13. Optimización**,"Reducir partículas, sampleo, conexiones","`Línea ~290`, `~162`, `~360`"
+**14. Glosario**,Tabla de 7 funciones clave con líneas,`~155` a `~700`
+**15. Dependencias**,"Google Fonts, sin frameworks",—
