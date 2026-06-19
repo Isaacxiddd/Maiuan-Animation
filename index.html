@@ -182,6 +182,7 @@
 
 <audio id="audioPalabras" preload="auto" src="palabras_jarvis.mp3"></audio>
 <audio id="audioConstruimos" preload="auto" src="construimos_jarvis.mp3"></audio>
+<audio id="audioMaiuan" preload="auto" src="maiuan.mp3"></audio>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -271,7 +272,8 @@ const PHASES = [
   { name: 'reveal',     duration: 3000 },
   { name: 'morph',      duration: 3000 },
   { name: 'manifesto',  duration: 6000 },
-  { name: 'final',      duration: 7000 },
+  { name: 'final',      duration: 5000 },
+  { name: 'maiuan',     duration: 2000 },
 ];
 const TOTAL_DURATION = PHASES.reduce((a,p) => a + p.duration, 0);
 
@@ -607,6 +609,7 @@ function render(timestamp) {
         initParticles();
         audioPalabras.pause(); audioPalabras.currentTime = 0;
         audioConstruimos.pause(); audioConstruimos.currentTime = 0;
+        audioMaiuan.pause(); audioMaiuan.currentTime = 0;
         document.getElementById('overlayManifesto').classList.remove('active');
         document.getElementById('overlayFinal').classList.remove('active');
         const finalOverlay = document.getElementById('overlayFinal');
@@ -781,9 +784,16 @@ function render(timestamp) {
     overlay.classList.add('active');
   }
 
+  // ── PHASE 8: MAIUAN ──
+  else if (phaseIdx === 8) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+  }
+
   if (phaseIdx !== lastPhase) {
     if (phaseIdx === 6) { audioPalabras.currentTime = 0; audioPalabras.play(); }
     else if (phaseIdx === 7) { audioConstruimos.currentTime = 0; audioConstruimos.play(); }
+    else if (phaseIdx === 8) { audioMaiuan.currentTime = 0; audioMaiuan.play(); }
     lastPhase = phaseIdx;
   }
 
@@ -840,13 +850,15 @@ btnExport.addEventListener('click', async () => {
   const audioDest = audioCtx.createMediaStreamDestination();
 
   try {
-    const [palabrasBuf, construimosBuf] = await Promise.all([
+    const [palabrasBuf, construimosBuf, maiuanBuf] = await Promise.all([
       fetch('palabras_jarvis.mp3').then(r => { if (!r.ok) throw new Error('audio'); return r.arrayBuffer(); }).then(b => audioCtx.decodeAudioData(b)),
       fetch('construimos_jarvis.mp3').then(r => { if (!r.ok) throw new Error('audio'); return r.arrayBuffer(); }).then(b => audioCtx.decodeAudioData(b)),
+      fetch('maiuan.mp3').then(r => { if (!r.ok) throw new Error('audio'); return r.arrayBuffer(); }).then(b => audioCtx.decodeAudioData(b)),
     ]);
 
     const phase6start = PHASES.slice(0, 6).reduce((a, p) => a + p.duration, 0);
     const phase7start = PHASES.slice(0, 7).reduce((a, p) => a + p.duration, 0);
+    const phase8start = PHASES.slice(0, 8).reduce((a, p) => a + p.duration, 0);
 
     setTimeout(() => {
       if (!isExporting) return;
@@ -859,6 +871,12 @@ btnExport.addEventListener('click', async () => {
       const s = audioCtx.createBufferSource();
       s.buffer = construimosBuf; s.connect(audioDest); s.start(audioCtx.currentTime);
     }, phase7start);
+
+    setTimeout(() => {
+      if (!isExporting) return;
+      const s = audioCtx.createBufferSource();
+      s.buffer = maiuanBuf; s.connect(audioDest); s.start(audioCtx.currentTime);
+    }, phase8start);
 
     const canvasStream = canvas.captureStream(30);
     const combinedStream = new MediaStream([
