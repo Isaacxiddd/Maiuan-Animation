@@ -117,12 +117,23 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 50;
     background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%);
   }
+  #btnExport {
+    position: fixed; bottom: 20px; right: 20px; z-index: 200;
+    background: rgba(232,255,0,0.15); border: 1px solid rgba(232,255,0,0.3);
+    color: #e8ff00; font-family: 'Inter', sans-serif; font-size: 12px;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer;
+    backdrop-filter: blur(8px); transition: all 0.3s ease;
+    user-select: none; letter-spacing: 0.04em;
+  }
+  #btnExport:hover { background: rgba(232,255,0,0.25); }
+  #btnExport:disabled { opacity: 0.4; cursor: wait; }
 </style>
 </head>
 <body>
 
 <div class="vignette"></div>
 <div class="progress-bar" id="progressBar"></div>
+<button id="btnExport" style="display:none">🎬 Exportar Video</button>
 
 <!-- SVG oculto con el favicon exacto -->
 <svg id="hiddenSvg" style="position:absolute;width:0;height:0;" viewBox="0 0 345 345" xmlns="http://www.w3.org/2000/svg">
@@ -168,6 +179,9 @@
     </div>
   </div>
 </div>
+
+<audio id="audioPalabras" preload="auto" src="palabras_jarvis.mp3"></audio>
+<audio id="audioConstruimos" preload="auto" src="construimos_jarvis.mp3"></audio>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -244,6 +258,7 @@ function extractLogoPoints() {
 }
 
 extractLogoPoints();
+let cachedAllPoints = logoPaths.flat();
 
 // ═══════════════════════════════════════════════════════════════
 // TIMELINE
@@ -262,6 +277,20 @@ const TOTAL_DURATION = PHASES.reduce((a,p) => a + p.duration, 0);
 
 let startTime = null;
 let hasFinished = false;
+let lastPhase = -1;
+
+const audioPalabras = document.getElementById('audioPalabras');
+const audioConstruimos = document.getElementById('audioConstruimos');
+
+// Only enable export when running locally
+const isLocal = !window.location.hostname.includes('vercel.app');
+const btnExport = document.getElementById('btnExport');
+// if (isLocal) btnExport.style.display = '';
+
+let isExporting = false;
+let stopRecordingAt = null;
+let mediaRecorder = null;
+let recordedChunks = [];
 
 // ═══════════════════════════════════════════════════════════════
 // 3D PROJECTION
@@ -434,6 +463,9 @@ function drawLogoProgressive(ctx, progress, scale) {
   const s = scale;
   const pathProgress = 1 / logoPaths.length;
 
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
   logoPaths.forEach((path, pathIdx) => {
     const pathStart = pathIdx * pathProgress;
     const pathEnd = pathStart + pathProgress;
@@ -443,40 +475,62 @@ function drawLogoProgressive(ctx, progress, scale) {
 
     const totalSegs = path.length - 1;
     const segLen = 1 / totalSegs;
+    const activeSeg = Math.min(totalSegs - 1, Math.floor(localProgress / segLen));
 
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    for (let i = 0; i < totalSegs; i++) {
-      const segProg = Math.max(0, Math.min(1, (localProgress - i * segLen) / (segLen * 1.5)));
-      if (segProg <= 0) continue;
-
-      const ease = 1 - Math.pow(1 - segProg, 2);
-      const mx = path[i].x * s + (path[i+1].x - path[i].x) * s * ease;
-      const my = path[i].y * s + (path[i+1].y - path[i].y) * s * ease;
-
+    // Lote completo: todos los segmentos ya terminados como un solo path
+    if (activeSeg > 0) {
       ctx.beginPath();
-      ctx.moveTo(path[i].x * s, path[i].y * s);
-      ctx.lineTo(mx, my);
-      ctx.strokeStyle = `rgba(232, 255, 0, ${0.1 * segProg})`;
+      ctx.moveTo(path[0].x * s, path[0].y * s);
+      for (let i = 1; i <= activeSeg; i++) {
+        ctx.lineTo(path[i].x * s, path[i].y * s);
+      }
+      ctx.strokeStyle = `rgba(232, 255, 0, 0.1)`;
       ctx.lineWidth = 6;
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.moveTo(path[i].x * s, path[i].y * s);
-      ctx.lineTo(mx, my);
-      ctx.strokeStyle = `rgba(232, 255, 0, ${0.85 * segProg})`;
+      ctx.moveTo(path[0].x * s, path[0].y * s);
+      for (let i = 1; i <= activeSeg; i++) {
+        ctx.lineTo(path[i].x * s, path[i].y * s);
+      }
+      ctx.strokeStyle = `rgba(232, 255, 0, 0.85)`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
 
-      if (segProg > 0.85) {
+    // Segmento activo: solo el que se está dibujando ahora
+    if (activeSeg < totalSegs) {
+      const i = activeSeg;
+      const segProg = Math.max(0, Math.min(1, (localProgress - i * segLen) / (segLen * 1.5)));
+      if (segProg > 0) {
+        const ease = 1 - Math.pow(1 - segProg, 2);
+        const mx = path[i].x * s + (path[i+1].x - path[i].x) * s * ease;
+        const my = path[i].y * s + (path[i+1].y - path[i].y) * s * ease;
+
         ctx.beginPath();
-        ctx.arc(mx, my, 3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(232, 255, 0, ${(segProg - 0.85) * 6})`;
-        ctx.fill();
+        ctx.moveTo(path[i].x * s, path[i].y * s);
+        ctx.lineTo(mx, my);
+        ctx.strokeStyle = `rgba(232, 255, 0, ${0.1 * segProg})`;
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(path[i].x * s, path[i].y * s);
+        ctx.lineTo(mx, my);
+        ctx.strokeStyle = `rgba(232, 255, 0, ${0.85 * segProg})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        if (segProg > 0.85) {
+          ctx.beginPath();
+          ctx.arc(mx, my, 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(232, 255, 0, ${(segProg - 0.85) * 6})`;
+          ctx.fill();
+        }
       }
     }
 
+    // Segmento de cierre (último → primero)
     if (localProgress > 0.95) {
       ctx.beginPath();
       ctx.moveTo(path[path.length-1].x * s, path[path.length-1].y * s);
@@ -531,6 +585,11 @@ function render(timestamp) {
   if (!startTime) startTime = timestamp;
   const elapsed = timestamp - startTime;
 
+  if (stopRecordingAt !== null && elapsed >= stopRecordingAt) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    stopRecordingAt = null;
+  }
+
   let phaseIdx = 0;
   let phaseElapsed = elapsed;
   for (let i = 0; i < PHASES.length; i++) {
@@ -544,7 +603,10 @@ function render(timestamp) {
       setTimeout(() => {
         startTime = null;
         hasFinished = false;
+        lastPhase = -1;
         initParticles();
+        audioPalabras.pause(); audioPalabras.currentTime = 0;
+        audioConstruimos.pause(); audioConstruimos.currentTime = 0;
         document.getElementById('overlayManifesto').classList.remove('active');
         document.getElementById('overlayFinal').classList.remove('active');
         const finalOverlay = document.getElementById('overlayFinal');
@@ -604,26 +666,30 @@ function render(timestamp) {
     ctx.fillRect(0, 0, W, H);
 
     if (logoPaths.length > 0) {
-      const allPoints = logoPaths.flat();
+      const spread = 20 * (1 - t);
       particles.forEach((p, i) => {
-        const idx = i % allPoints.length;
-        const spread = 20 * (1 - t);
-        p.targetX = allPoints[idx].x * logoScale + (Math.random() - 0.5) * spread;
-        p.targetY = allPoints[idx].y * logoScale + (Math.random() - 0.5) * spread;
-        p.targetZ = (Math.random() - 0.5) * spread;
+        const idx = i % cachedAllPoints.length;
+        const r1 = Math.random(), r2 = Math.random(), r3 = Math.random();
+        p.targetX = cachedAllPoints[idx].x * logoScale + (r1 - 0.5) * spread;
+        p.targetY = cachedAllPoints[idx].y * logoScale + (r2 - 0.5) * spread;
+        p.targetZ = (r3 - 0.5) * spread;
         p.update(0.016, 3, 1);
       });
     }
 
     drawLogoProgressive(ctx, t, logoScale);
 
+    ctx.beginPath();
     particles.forEach(p => {
       const p2 = project(p.x, p.y, p.z);
-      ctx.beginPath();
-      ctx.arc(p2.x, p2.y, 1.2 * p2.scale, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(232, 255, 0, ${0.5 * (1 - t * 0.3)})`;
-      ctx.fill();
+      const r = 1.2 * p2.scale;
+      if (r >= 0.15) {
+        ctx.moveTo(p2.x + r, p2.y);
+        ctx.arc(p2.x, p2.y, r, 0, Math.PI * 2);
+      }
     });
+    ctx.fillStyle = `rgba(232, 255, 0, ${0.5 * (1 - t * 0.3)})`;
+    ctx.fill();
   }
 
   // ── PHASE 4: REVEAL (logo solidifica) ──
@@ -632,11 +698,10 @@ function render(timestamp) {
     ctx.fillRect(0, 0, W, H);
 
     if (logoPaths.length > 0) {
-      const allPoints = logoPaths.flat();
       particles.forEach((p, i) => {
-        const idx = i % allPoints.length;
-        p.targetX = allPoints[idx].x * logoScale;
-        p.targetY = allPoints[idx].y * logoScale;
+        const idx = i % cachedAllPoints.length;
+        p.targetX = cachedAllPoints[idx].x * logoScale;
+        p.targetY = cachedAllPoints[idx].y * logoScale;
         p.targetZ = 0;
         p.update(0.016, 3, 1);
       });
@@ -656,40 +721,30 @@ function render(timestamp) {
       logoPaths = orig;
     }
 
+    ctx.beginPath();
     particles.forEach(p => {
       const p2 = project(p.x, p.y, p.z);
-      ctx.beginPath();
-      ctx.arc(p2.x, p2.y, 0.8 * p2.scale, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(232, 255, 0, ${0.25 * (1 - t)})`;
-      ctx.fill();
+      const r = 0.8 * p2.scale;
+      if (r >= 0.15) {
+        ctx.moveTo(p2.x + r, p2.y);
+        ctx.arc(p2.x, p2.y, r, 0, Math.PI * 2);
+      }
     });
+    ctx.fillStyle = `rgba(232, 255, 0, ${0.25 * (1 - t)})`;
+    ctx.fill();
   }
 
-  // ── PHASE 5: MORPH ──
+  // ── PHASE 5: FUNDIDO DIRECTO ──
   else if (phaseIdx === 5) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
     ctx.fillRect(0, 0, W, H);
 
     if (logoPaths.length > 0) {
-      const morphPaths = getMorphLogoPoints(logoPaths, t * 3);
-      const orig = logoPaths;
-      logoPaths = morphPaths;
-      drawLogoExact(ctx, logoScale, 0.5 + 0.4 * Math.sin(t * Math.PI * 4), 0.06, 1.8);
-      logoPaths = orig;
-
-      morphPaths.forEach((path, pi) => {
-        path.forEach((pt, i) => {
-          const proj = project(pt.x * logoScale, pt.y * logoScale, pt.z * logoScale);
-          const pulse = 0.5 + 0.5 * Math.sin(t * 5 + i * 0.4 + pi);
-          ctx.beginPath();
-          ctx.arc(proj.x, proj.y, 2.5 * pulse * proj.scale, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(232, 255, 0, ${0.6 * pulse})`;
-          ctx.fill();
-        });
-      });
+      const fade = 1 - t * 0.5;
+      drawLogoExact(ctx, logoScale, fade, 0.12 * fade, 2);
     }
 
-    particles.forEach(p => { p.update(0.016, 5, 1); p.draw(ctx, 0.3); });
+    particles.forEach(p => { p.update(0.016, 6, 1); p.draw(ctx, 1); });
   }
 
   // ── PHASE 6: MANIFESTO ──
@@ -726,6 +781,12 @@ function render(timestamp) {
     overlay.classList.add('active');
   }
 
+  if (phaseIdx !== lastPhase) {
+    if (phaseIdx === 6) { audioPalabras.currentTime = 0; audioPalabras.play(); }
+    else if (phaseIdx === 7) { audioConstruimos.currentTime = 0; audioConstruimos.play(); }
+    lastPhase = phaseIdx;
+  }
+
   requestAnimationFrame(render);
 }
 
@@ -755,7 +816,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     startTime = null;
     hasFinished = false;
+    lastPhase = -1;
     initParticles();
+    audioPalabras.pause(); audioPalabras.currentTime = 0;
+    audioConstruimos.pause(); audioConstruimos.currentTime = 0;
     document.getElementById('overlayManifesto').classList.remove('active');
     document.getElementById('overlayFinal').classList.remove('active');
     manifestoIndex = -1;
@@ -764,7 +828,83 @@ document.addEventListener('keydown', (e) => {
     void finalOverlay.offsetWidth;
   }
 });
-</script>
 
+if (isLocal && btnExport) {
+btnExport.addEventListener('click', async () => {
+  if (isExporting) return;
+  isExporting = true;
+  btnExport.disabled = true;
+  btnExport.textContent = 'Preparando...';
+
+  const audioCtx = new AudioContext();
+  const audioDest = audioCtx.createMediaStreamDestination();
+
+  try {
+    const [palabrasBuf, construimosBuf] = await Promise.all([
+      fetch('palabras_jarvis.mp3').then(r => { if (!r.ok) throw new Error('audio'); return r.arrayBuffer(); }).then(b => audioCtx.decodeAudioData(b)),
+      fetch('construimos_jarvis.mp3').then(r => { if (!r.ok) throw new Error('audio'); return r.arrayBuffer(); }).then(b => audioCtx.decodeAudioData(b)),
+    ]);
+
+    const phase6start = PHASES.slice(0, 6).reduce((a, p) => a + p.duration, 0);
+    const phase7start = PHASES.slice(0, 7).reduce((a, p) => a + p.duration, 0);
+
+    setTimeout(() => {
+      if (!isExporting) return;
+      const s = audioCtx.createBufferSource();
+      s.buffer = palabrasBuf; s.connect(audioDest); s.start(audioCtx.currentTime);
+    }, phase6start);
+
+    setTimeout(() => {
+      if (!isExporting) return;
+      const s = audioCtx.createBufferSource();
+      s.buffer = construimosBuf; s.connect(audioDest); s.start(audioCtx.currentTime);
+    }, phase7start);
+
+    const canvasStream = canvas.captureStream(30);
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioDest.getAudioTracks(),
+    ]);
+
+    recordedChunks = [];
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+    mediaRecorder = new MediaRecorder(combinedStream, { mimeType: mime });
+
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'maiuan_reel.webm';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      audioCtx.close();
+      btnExport.disabled = false; btnExport.textContent = '🎬 Exportar Video';
+      isExporting = false;
+    };
+
+    mediaRecorder.start(100);
+    btnExport.textContent = '⏳ Grabando 32s...';
+
+    startTime = null; hasFinished = false; lastPhase = -1;
+    initParticles();
+    audioPalabras.pause(); audioPalabras.currentTime = 0;
+    audioConstruimos.pause(); audioConstruimos.currentTime = 0;
+    document.getElementById('overlayManifesto').classList.remove('active');
+    document.getElementById('overlayFinal').classList.remove('active');
+    manifestoIndex = -1;
+    stopRecordingAt = TOTAL_DURATION;
+  } catch (e) {
+    audioCtx.close();
+    btnExport.disabled = false; btnExport.textContent = '🎬 Exportar Video';
+    isExporting = false;
+    alert('Error al exportar');
+  }
+});
+}
+
+</script>
 </body>
 </html>
