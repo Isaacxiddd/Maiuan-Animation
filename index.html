@@ -603,19 +603,10 @@ function render(timestamp) {
     if (!hasFinished) {
       hasFinished = true;
       setTimeout(() => {
-        startTime = null;
-        hasFinished = false;
-        lastPhase = -1;
-        initParticles();
-        audioPalabras.pause(); audioPalabras.currentTime = 0;
-        audioConstruimos.pause(); audioConstruimos.currentTime = 0;
-        audioMaiuan.pause(); audioMaiuan.currentTime = 0;
         document.getElementById('overlayManifesto').classList.remove('active');
         document.getElementById('overlayFinal').classList.remove('active');
-        const finalOverlay = document.getElementById('overlayFinal');
-        finalOverlay.classList.remove('active');
-        void finalOverlay.offsetWidth;
-      }, 500);
+        window.location.href = 'https://maiuan.vercel.app';
+      }, 2500);
     }
     requestAnimationFrame(render);
     return;
@@ -680,7 +671,8 @@ function render(timestamp) {
       });
     }
 
-    drawLogoProgressive(ctx, t, logoScale);
+    const buildT = t < 1/3 ? t : 1/3 + (t - 1/3) * 1.5;
+    drawLogoProgressive(ctx, Math.min(1, buildT), logoScale);
 
     ctx.beginPath();
     particles.forEach(p => {
